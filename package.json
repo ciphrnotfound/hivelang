@@ -28,7 +28,20 @@
     }
   },
   "files": [
-    "dist",
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/v5/ast.js",
+    "dist/v5/ast.d.ts",
+    "dist/v5/index.js",
+    "dist/v5/index.d.ts",
+    "dist/v5/parser.js",
+    "dist/v5/parser.d.ts",
+    "dist/v5/runtime.js",
+    "dist/v5/runtime.d.ts",
+    "dist/v5/tokenizer.js",
+    "dist/v5/tokenizer.d.ts",
+    "dist/v5/tool-schemas.js",
+    "dist/v5/tool-schemas.d.ts",
     "README.md",
     "LICENSE",
     "NOTICE"
