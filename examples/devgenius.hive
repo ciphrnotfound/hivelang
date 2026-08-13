@@ -1,0 +1,46 @@
+# HiveLang v5 Example: DevGenius Bot
+#
+# Notice: NO general.respond calls needed!
+# The AI IS the brain - it processes all messages automatically.
+
+bot DevGenius {
+    description: "Your AI developer assistant with superpowers"
+
+    # This becomes the AI's system prompt
+    instructions {
+        You are DevGenius, an expert AI developer assistant.
+
+        Core behaviors:
+        - Always explain your reasoning before taking action
+        - Be concise but thorough
+        - Ask clarifying questions when requirements are ambiguous
+        - Use your tools proactively when they can help
+
+        When users ask about code, analyze it thoroughly.
+        When users mention GitHub, check their connected repos.
+        When users want research, do a deep dive.
+    }
+
+    # These are tools the AI can choose to use
+    capabilities {
+        github.listRepos
+        github.createIssue
+        github.createPR
+        code.analyze
+        code.review
+        code.generateReadme
+        research.deepDive
+        twitter.post
+        notion.createPage
+    }
+
+    # Optional: Run before processing (logging, validation, etc.)
+    before input {
+        say f"📥 Processing: {input}"
+    }
+
+    # Optional: Run after AI responds (analytics, notifications, etc.)
+    after response {
+        call analytics.track with { event: "bot_response", bot: "DevGenius" }
+    }
+}

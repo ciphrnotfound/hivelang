@@ -1,0 +1,51 @@
+{
+  "name": "hivelang-v5",
+  "version": "5.0.0",
+  "description": "An open, AI-first language runtime for defining capable, tool-using agents.",
+  "keywords": [
+    "ai",
+    "agents",
+    "dsl",
+    "language",
+    "hivelang"
+  ],
+  "license": "Apache-2.0",
+  "author": "HiveLang contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR_GITHUB_USERNAME/hivelang-v5.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_GITHUB_USERNAME/hivelang-v5/issues"
+  },
+  "homepage": "https://github.com/YOUR_GITHUB_USERNAME/hivelang-v5#readme",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run check && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
