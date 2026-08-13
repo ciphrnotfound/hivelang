@@ -1,5 +1,5 @@
 {
-  "name": "hivelang-v5",
+  "name": "hivelang",
   "version": "5.0.0",
   "description": "An open, AI-first language runtime for defining capable, tool-using agents.",
   "keywords": [
@@ -13,12 +13,12 @@
   "author": "HiveLang contributors",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR_GITHUB_USERNAME/hivelang-v5.git"
+    "url": "git+https://github.com/YOUR_GITHUB_USERNAME/hivelang.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR_GITHUB_USERNAME/hivelang-v5/issues"
+    "url": "https://github.com/YOUR_GITHUB_USERNAME/hivelang/issues"
   },
-  "homepage": "https://github.com/YOUR_GITHUB_USERNAME/hivelang-v5#readme",
+  "homepage": "https://github.com/YOUR_GITHUB_USERNAME/hivelang#readme",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

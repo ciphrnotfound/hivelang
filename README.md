@@ -9,13 +9,13 @@ v5 is an early, usable runtime. Its API and language grammar may evolve before a
 ## Install
 
 ```bash
-npm install hivelang-v5
+npm install hivelang
 ```
 
 ## Quick start
 
 ```ts
-import { createRuntime } from 'hivelang-v5';
+import { createRuntime } from 'hivelang';
 
 const source = `
 bot SupportAgent {
