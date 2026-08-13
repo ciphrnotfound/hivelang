@@ -1,13 +1,14 @@
 {
   "name": "hivelang",
   "version": "5.0.0",
-  "description": "An open, AI-first language runtime for defining capable, tool-using agents.",
+  "description": "Bothive's open-source, AI-first DSL and runtime for capable, tool-using agents.",
   "keywords": [
     "ai",
     "agents",
     "dsl",
     "language",
-    "hivelang"
+    "hivelang",
+    "bothive"
   ],
   "license": "Apache-2.0",
   "author": "HiveLang contributors",

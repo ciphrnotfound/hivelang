@@ -1,10 +1,16 @@
-# HiveLang v5
+# HiveLang
 
-HiveLang is an open, AI-first language for defining capable agents. A HiveLang file describes an agent's instructions, allowed tools, and optional specialist sub-agents; your application supplies the AI provider and tool implementations.
+HiveLang is Bothive's custom, AI-first domain-specific language (DSL) for defining capable agents. A HiveLang file describes an agent's instructions, allowed tools, and optional specialist sub-agents; your application supplies the AI provider and tool implementations.
 
 ## Status
 
-v5 is an early, usable runtime. Its API and language grammar may evolve before a stable 1.0 release. Do not expose untrusted HiveLang programs to high-privilege tools without a policy layer and explicit approval controls.
+v5 is the version currently used by Bothive. It is an early, usable runtime; its API and language grammar may evolve before a stable 1.0 release. Do not expose untrusted HiveLang programs to high-privilege tools without a policy layer and explicit approval controls.
+
+## Relationship to Bothive
+
+HiveLang originated as the custom DSL that powers agent definitions in [Bothive](https://bothive.ai). Bothive uses the same v5 language model—tokenizer, parser, runtime, tool-capability model, and hierarchical agent execution—that this repository publishes.
+
+This repository is the open-source language runtime, not the Bothive hosted application. Bothive's deployment additionally supplies authenticated APIs, AI-provider adapters, integrations and OAuth credentials, data storage, authorization, billing, and production observability. Those application services are intentionally not included here. When Bothive adopts a new HiveLang version, the corresponding runtime should be released here as the next version of this package.
 
 ## Install
 
