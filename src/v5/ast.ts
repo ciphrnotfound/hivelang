@@ -353,6 +353,8 @@ export type ExpressionNode =
     | LiteralNode
     | IdentifierNode
     | BinaryExpressionNode
+    | UnaryExpressionNode
+    | FunctionCallExpressionNode
     | MemberExpressionNode
     | ConditionalExpressionNode
     | FStringNode
@@ -382,6 +384,18 @@ export interface BinaryExpressionNode {
     operator: string;
     left: ExpressionNode;
     right: ExpressionNode;
+}
+
+export interface UnaryExpressionNode {
+    type: 'UnaryExpression';
+    operator: string;
+    argument: ExpressionNode;
+}
+
+export interface FunctionCallExpressionNode {
+    type: 'FunctionCallExpression';
+    callee: ExpressionNode;
+    arguments: ExpressionNode[];
 }
 
 export interface MemberExpressionNode {

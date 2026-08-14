@@ -1314,6 +1314,20 @@ export class HiveLangV5Runtime {
                 const right = await this.evaluateExpression(expr.right, context);
                 return this.evaluateBinary(expr.operator, left, right);
 
+            case 'UnaryExpression': {
+                const value = await this.evaluateExpression(expr.argument, context);
+                if (expr.operator === '!' || expr.operator === 'not') return !value;
+                if (expr.operator === '-') return -Number(value || 0);
+                if (expr.operator === '+') return Number(value || 0);
+                return value;
+            }
+
+            case 'FunctionCallExpression': {
+                const args = [];
+                for (const arg of expr.arguments) args.push(await this.evaluateExpression(arg, context));
+                return this.evaluateFunctionCall(expr.callee, args, context);
+            }
+
             case 'ConditionalExpression':
                 return (await this.evaluateExpression(expr.test, context))
                     ? await this.evaluateExpression(expr.consequent, context)
@@ -1345,6 +1359,60 @@ export class HiveLangV5Runtime {
                 }
                 return objResult;
 
+            default:
+                return null;
+        }
+    }
+
+    /** Evaluate the small, deterministic helper vocabulary permitted in HiveLang expressions. */
+    private evaluateFunctionCall(callee: AST.ExpressionNode, args: any[], context: ExecutionContext): any {
+        let name = '';
+        let receiver: any = undefined;
+        if (callee.type === 'Identifier') {
+            name = callee.name;
+        } else if (callee.type === 'MemberExpression') {
+            receiver = undefined;
+            let obj: any = callee.object.type === 'Identifier'
+                ? context.variables[callee.object.name]
+                : undefined;
+            if (callee.computed) return null;
+            name = (callee.property as AST.IdentifierNode).name;
+            receiver = obj;
+        } else {
+            return null;
+        }
+
+        const target = receiver === undefined ? args[0] : receiver;
+        switch (name.toLowerCase()) {
+            case 'length':
+            case 'len':
+            case 'count':
+                return target == null ? 0 : (typeof target === 'number' ? target : (target.length ?? 0));
+            case 'isempty':
+                return target == null || (target.length ?? 0) === 0;
+            case 'trim':
+                return String(target ?? '').trim();
+            case 'tolowercase':
+            case 'lower':
+                return String(target ?? '').toLowerCase();
+            case 'touppercase':
+            case 'upper':
+                return String(target ?? '').toUpperCase();
+            case 'string':
+                return String(target ?? '');
+            case 'number':
+                return Number(target ?? 0);
+            case 'boolean':
+                return Boolean(target);
+            case 'join':
+                return Array.isArray(target) ? target.join(args[1] ?? ', ') : '';
+            case 'includes':
+            case 'contains':
+                return target != null && typeof target.includes === 'function' ? target.includes(args[1]) : false;
+            case 'startswith':
+                return typeof target === 'string' && target.startsWith(String(args[1] ?? ''));
+            case 'endswith':
+                return typeof target === 'string' && target.endsWith(String(args[1] ?? ''));
             default:
                 return null;
         }

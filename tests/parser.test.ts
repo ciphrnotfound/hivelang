@@ -50,6 +50,21 @@ bot TasksAssistant {
     ]);
   });
 
+  it('parses helper calls, member calls, unary operators, and comparisons', () => {
+    const result = parseHiveLang(`
+bot HelperBot {
+  instructions { Normalize the incoming message. }
+  on user.message {
+    cleaned = trim(input.text)
+    if (!isEmpty(cleaned) && length(cleaned) > 0) {
+      say cleaned.toLowerCase()
+    }
+  }
+}`);
+
+    expect(result.errors).toEqual([]);
+  });
+
   it('returns precise diagnostics for malformed source', () => {
     const result = parseHiveLang('bot Broken { description: "unterminated }');
     expect(result.errors).toContain('Unterminated string at 1:27');

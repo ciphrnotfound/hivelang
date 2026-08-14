@@ -1318,16 +1318,28 @@ export class Parser {
     }
 
     private parseFactor(): AST.ExpressionNode {
-        let left = this.parsePrimary();
+        let left = this.parseUnary();
         while (this.match('OPERATOR', '*') || this.match('OPERATOR', '/')) {
             const operator = this.previous().value;
-            const right = this.parsePrimary();
+            const right = this.parseUnary();
             left = { type: 'BinaryExpression', operator, left, right };
         }
 
-        // Member access
+        // Postfix member access and function calls. The generated HiveLang often
+        // uses helpers such as `length(items)` or `items.length()`. Treat these
+        // as expressions so their closing paren cannot cascade into fake
+        // statement/comparison errors.
         while (true) {
-            if (this.match('PUNCTUATION', '.')) {
+            if (this.match('PUNCTUATION', '(')) {
+                const args: AST.ExpressionNode[] = [];
+                if (!this.check('PUNCTUATION', ')')) {
+                    do {
+                        args.push(this.parseExpression());
+                    } while (this.match('PUNCTUATION', ','));
+                }
+                this.consume('PUNCTUATION', ')', "Expected ')' after function arguments");
+                left = { type: 'FunctionCallExpression', callee: left, arguments: args };
+            } else if (this.match('PUNCTUATION', '.')) {
                 // After a `.`, the property name is unambiguously an identifier even
                 // when the word is a reserved keyword — `input.to`, `msg.from`,
                 // `job.with` are all valid property accesses. Without accepting
@@ -1350,6 +1362,16 @@ export class Parser {
         }
 
         return left;
+    }
+
+    private parseUnary(): AST.ExpressionNode {
+        if (this.match('OPERATOR', '!') || this.match('OPERATOR', '-') || this.match('OPERATOR', '+')) {
+            return { type: 'UnaryExpression', operator: this.previous().value, argument: this.parseUnary() };
+        }
+        if (this.matchKeyword('not')) {
+            return { type: 'UnaryExpression', operator: 'not', argument: this.parseUnary() };
+        }
+        return this.parsePrimary();
     }
 
     private parsePrimary(): AST.ExpressionNode {
