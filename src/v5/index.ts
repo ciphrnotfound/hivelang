@@ -11,6 +11,7 @@ export * from './ast';
 export * from './tokenizer';
 export * from './parser';
 export * from './runtime';
+export * from './validation';
 
 // Re-export main classes for convenience
 export { Tokenizer } from './tokenizer';

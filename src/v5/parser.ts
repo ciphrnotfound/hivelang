@@ -20,10 +20,12 @@
 
 import { Token, TokenType, Tokenizer } from './tokenizer';
 import * as AST from './ast';
+import { HiveLangDiagnostic, validateProgram } from './validation';
 
 export interface ParseResult {
     program: AST.ProgramNode;
     errors: string[];
+    diagnostics: HiveLangDiagnostic[];
 }
 
 export class Parser {
@@ -60,11 +62,11 @@ export class Parser {
                     // Swarm is just a bot with multiple agents
                     bots.push(this.parseSwarm());
                 } else {
-                    // Skip unknown top-level tokens
+                    this.reportUnexpected('top-level declaration');
                     this.advance();
                 }
             } catch (e: any) {
-                this.errors.push(e.message);
+                this.errors.push(this.formatError(e));
                 this.synchronize();
             }
         }
@@ -75,10 +77,10 @@ export class Parser {
             }
         }
 
-        return {
-            program: { type: 'Program', bots, imports },
-            errors: this.errors
-        };
+        const program = { type: 'Program' as const, bots, imports };
+        const diagnostics = validateProgram(program);
+        this.errors.push(...diagnostics.filter(diagnostic => diagnostic.severity === 'error').map(diagnostic => diagnostic.message));
+        return { program, errors: this.errors, diagnostics };
     }
 
     // ============ Top-Level Parsing ============
@@ -177,6 +179,7 @@ export class Parser {
                 bot.totHandlers.push(this.parseTotHandler());
             } else {
                 // Skip unknown tokens in bot body
+                this.reportUnexpected('bot body');
                 this.advance();
             }
         }
@@ -256,6 +259,7 @@ export class Parser {
                         agent.body = { type: 'Block', statements: [] };
                     }
                 } else {
+                    this.reportUnexpected('capability list');
                     this.advance();
                 }
             }
@@ -276,9 +280,6 @@ export class Parser {
         }
 
         if (this.match('PUNCTUATION', '{')) {
-            // Store the start position (index in token array)
-            const startTokenIndex = this.current;
-
             // Find the matching closing brace by tracking depth
             let braceDepth = 1;
             const contentTokens: Token[] = [];
@@ -305,18 +306,12 @@ export class Parser {
             // Consume the closing brace
             this.advance();
 
-            // If we have source code, extract directly from it
+            // Token source offsets make this O(1) and preserve original formatting.
             if (this.source && contentTokens.length > 0) {
-                // Find the first and last token positions in source
                 const firstToken = contentTokens[0];
                 const lastToken = contentTokens[contentTokens.length - 1];
-
-                // Calculate approximate character positions
-                const startPos = this.estimateTokenPosition(firstToken);
-                const endPos = this.estimateTokenPosition(lastToken) + lastToken.value.length;
-
-                if (startPos >= 0 && endPos > startPos && endPos <= this.source.length) {
-                    return this.source.substring(startPos, endPos).trim();
+                if (firstToken.start >= 0 && lastToken.end > firstToken.start && lastToken.end <= this.source.length) {
+                    return this.source.substring(firstToken.start, lastToken.end).trim();
                 }
             }
 
@@ -325,37 +320,6 @@ export class Parser {
         }
 
         return '';
-    }
-
-    private estimateTokenPosition(token: Token): number {
-        // Estimate character position by scanning through source
-        // This is a best-effort approach
-        let pos = 0;
-        let line = 1;
-        let col = 1;
-
-        while (pos < this.source.length) {
-            if (line === token.line && col === token.column) {
-                return pos;
-            }
-
-            if (this.source[pos] === '\n') {
-                line++;
-                col = 1;
-            } else if (this.source[pos] === '\r') {
-                // Handle \r\n or just \r
-                if (pos + 1 < this.source.length && this.source[pos + 1] === '\n') {
-                    pos++; // Skip the \n
-                }
-                line++;
-                col = 1;
-            } else {
-                col++;
-            }
-            pos++;
-        }
-
-        return -1; // Not found
     }
 
     private parseCapabilitiesList(): string[] {
@@ -375,7 +339,7 @@ export class Parser {
                         }
                     }
                     capabilities.push(cap);
-                } else if (this.check('PUNCTUATION', '-')) {
+                } else if (this.check('PUNCTUATION', '-') || this.check('OPERATOR', '-')) {
                     // Handle bullet-point style: - github.listRepos
                     this.advance(); // consume '-'
                 } else {
@@ -399,6 +363,7 @@ export class Parser {
                     }
                     capabilities.push(cap);
                 } else {
+                    this.reportUnexpected('capability list');
                     this.advance(); // skip stray punctuation
                 }
                 this.match('PUNCTUATION', ','); // Optional comma
@@ -482,6 +447,7 @@ export class Parser {
                     // If parseStatement returns null, we hit an unknown token
                     // Skip it to avoid infinite loop
                     if (!this.check('PUNCTUATION', '}') && !this.isAtEnd()) {
+                        this.reportUnexpected('statement');
                         this.advance();
                     }
                 }
@@ -1134,7 +1100,11 @@ export class Parser {
 
         // Parse fallback action
         if (this.matchKeyword('fallback')) {
-            fallback = this.parseStatement();
+            // Fallbacks are commonly written as `fallback { ... }`; accept the
+            // block form as well as a single fallback statement.
+            fallback = this.check('PUNCTUATION', '{')
+                ? this.parseBlockBody()
+                : this.parseStatement();
         }
 
         return {
@@ -1530,10 +1500,21 @@ export class Parser {
         while (!this.isAtEnd()) {
             if (this.peek().type === 'KEYWORD') {
                 const kw = this.peek().value;
-                if (['bot', 'agent', 'swarm', 'on'].includes(kw)) return;
+                if (['bot', 'agent', 'swarm', 'on', 'plan', 'schedule', 'webhook'].includes(kw)) return;
             }
             this.advance();
         }
+    }
+
+    private formatError(error: unknown): string {
+        const message = error instanceof Error ? error.message : String(error);
+        const token = this.peek();
+        return /\bat \d+:\d+\b/.test(message) ? message : `${message} at ${token.line}:${token.column}`;
+    }
+
+    private reportUnexpected(context: string): void {
+        const token = this.peek();
+        this.errors.push(`Unexpected ${token.type.toLowerCase()} "${token.value}" in ${context} at ${token.line}:${token.column}`);
     }
 }
 
@@ -1543,5 +1524,7 @@ export function parseHiveLang(code: string): ParseResult {
     const tokenizer = new Tokenizer(code);
     const tokens = tokenizer.tokenize();
     const parser = new Parser(tokens, code);
-    return parser.parse()
+    const result = parser.parse();
+    result.errors.unshift(...tokenizer.getErrors());
+    return result;
 }

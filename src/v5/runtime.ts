@@ -470,7 +470,7 @@ export class HiveLangV5Runtime {
             systemPromptPrefix ? `${systemPromptPrefix}\n\n${config.systemPrompt}` : config.systemPrompt,
             tools,
             missingCaps,
-        );
+        ) + this.buildLiveDataToolGuidance(userMessage, tools);
 
         await this.runAgentLoop(groundedPrompt, userMessage, tools, context, config, 0);
 
@@ -909,6 +909,47 @@ export class HiveLangV5Runtime {
         p += '- NEVER claim you performed an action unless a real tool in the list actually returned a successful result.\n';
         p += '- If no available tool can satisfy the request, say so plainly and stop — do not fabricate a result.\n';
         return p;
+    }
+
+    /**
+     * Turn casual requests for a user's current information into an explicit
+     * read-tool instruction. This supplements the general tool roster without
+     * adding a planner/model call, so it improves reliability without slowing
+     * down ordinary conversation.
+     */
+    private buildLiveDataToolGuidance(userMessage: string, tools: ToolDefinition[]): string {
+        const text = userMessage.toLowerCase();
+        const pureConversationalTurn = /^(?:hm+|hmm+|uh+|um+|okay|ok|alright|nothing(?: really)?|no+(?:\s+no+)*|thanks?|thank you|cool|nice|got it)[.!?\s]*$/i.test(text)
+            || /^(?:what can you do|what are you able to do|explain your (?:role|capabilities|tools?))\b/i.test(text);
+        if (pureConversationalTurn) {
+            return "\n\nCONVERSATIONAL TURN: This is small talk, a capability question, or an acknowledgement. Do not call any external tool; answer naturally and briefly.";
+        }
+        const domains = [
+            { label: "calendar", request: /\b(agenda|calendar|meeting(?:s)?|appointments?|availability|free time|busy|schedule|day look)\b/, tool: /calendar|agenda|event|meeting|appointment|availability/ },
+            { label: "email", request: /\b(inbox|emails?|mail|unread|thread|reply)\b/, tool: /gmail|email|mail|inbox|message/ },
+            { label: "tasks", request: /\b(tasks?|to[ -]?do(?:s)?|blockers?|backlog|assigned to me)\b/, tool: /task|todo|to-do|reminder|asana|trello|linear/ },
+            { label: "code work", request: /\b(repo(?:s)?|pull requests?|\bprs?\b|branches?|commits?|deploy(?:ment|s)?|build(?:s)?|workflow(?:s)?)\b/, tool: /github|gitlab|repo|pull.?request|branch|commit|workflow|deploy/ },
+            { label: "team conversations", request: /\b(slack|channel|thread|team update|conversation)\b/, tool: /slack|discord|teams|channel|thread|message/ },
+            { label: "customers", request: /\b(leads?|contacts?|customers?|prospects?|deals?|pipeline)\b/, tool: /hubspot|salesforce|crm|lead|contact|deal|pipeline/ },
+            { label: "support", request: /\b(tickets?|support cases?|incidents?|complaints?)\b/, tool: /zendesk|intercom|freshdesk|ticket|support|incident/ },
+            { label: "documents", request: /\b(document(?:s)?|docs?|notes?|files?|drive|pages?|spreadsheet(?:s)?)\b/, tool: /notion|drive|dropbox|document|docs|page|file|sheet|onenote|obsidian/ },
+            { label: "commerce", request: /\b(orders?|subscriptions?|payments?|invoices?|revenue)\b/, tool: /stripe|shopify|order|subscription|payment|invoice/ },
+        ];
+        const requestedDomains = domains.filter((domain) => domain.request.test(text));
+        const isQuestion = /[?]|^\s*(what|which|who|where|when|how|do|does|did|are|is|can|could)\b/.test(text);
+        const isReadOnlyRequest = isQuestion || (requestedDomains.length > 0 && /\b(brief|summary|overview|status|update|current|latest|recent|check|show|tell me|give me)\b/.test(text));
+        if (!requestedDomains.length || !isReadOnlyRequest) return '';
+
+        const matchingReadTools = tools.filter((tool) => {
+            const descriptor = `${tool.name} ${tool.description || ''}`.toLowerCase();
+            const readAction = /\b(list|get|read|search|find|fetch|view|check)\b/.test(descriptor);
+            return readAction && requestedDomains.some((domain) => domain.tool.test(descriptor));
+        });
+        const sourceNames = requestedDomains.map((domain) => domain.label).join(', ');
+        if (matchingReadTools.length === 0) {
+            return `\n\nLIVE PERSONAL DATA REQUEST: The user is asking about ${sourceNames}. No matching read tool is enabled. Say that this specific source is not connected or available; do not pretend you checked it.`;
+        }
+        return `\n\nLIVE PERSONAL DATA REQUEST: The user is asking about their current ${sourceNames}. Before answering, call the relevant enabled read-only tool(s): ${matchingReadTools.map(tool => tool.name).join(', ')}. Treat their results as the source of truth. Do not use any write tool unless the user separately asks to change something.`;
     }
 
     private getToolDefinitionsForCapabilities(capabilities: string[]): ToolDefinition[] {

@@ -85,4 +85,91 @@ describe("HiveLang v5 runtime reliability", () => {
     expect(context.output).toEqual(["I found the verified agenda."]);
     expect(context.toolCalls[0]?.result?.success).toBe(false);
   });
+
+  it("treats a casual agenda question as a calendar read request", async () => {
+    let turn = 0;
+    let prompt = "";
+    let calendarReads = 0;
+    const runtime = new HiveLangV5Runtime(async (systemPrompt) => {
+      prompt = systemPrompt;
+      turn += 1;
+      if (turn === 1) {
+        return { content: "", toolCalls: [{ name: "calendar.listEvents", arguments: { maxResults: 10 } }] };
+      }
+      return { content: "You have a product review at 10:00." };
+    });
+    runtime.registerTool("calendar.listEvents", async () => {
+      calendarReads += 1;
+      return { success: true, events: [{ title: "Product review", start: "10:00" }] };
+    }, {
+      name: "calendar.listEvents",
+      description: "List upcoming calendar events",
+      parameters: { type: "object", properties: { maxResults: { type: "number" } } },
+    });
+    runtime.registerTool("calendar.createEvent", async () => ({ success: true }), {
+      name: "calendar.createEvent",
+      description: "Create a calendar event",
+      parameters: { type: "object", properties: { title: { type: "string" } } },
+    });
+    runtime.loadCode(`bot AgendaAgent {
+  capabilities { calendar.listEvents calendar.createEvent }
+  instructions { Help the user. }
+}`);
+
+    const context = await runtime.execute("AgendaAgent", "What's on my agenda for the day?");
+
+    expect(calendarReads).toBe(1);
+    expect(context.output).toEqual(["You have a product review at 10:00."]);
+    expect(prompt).toContain("LIVE PERSONAL DATA REQUEST");
+    expect(prompt).toContain("calendar.listEvents");
+    expect(prompt).toContain("Do not use any write tool");
+  });
+
+  it("treats a natural PR-review question as a connected code read request", async () => {
+    let turn = 0;
+    let prompt = "";
+    const runtime = new HiveLangV5Runtime(async (systemPrompt) => {
+      prompt = systemPrompt;
+      turn += 1;
+      if (turn === 1) return { content: "", toolCalls: [{ name: "github.listPullRequests", arguments: {} }] };
+      return { content: "Two pull requests are waiting for review." };
+    });
+    runtime.registerTool("github.listPullRequests", async () => ({ success: true, pullRequests: [] }), {
+      name: "github.listPullRequests",
+      description: "List pull requests awaiting review",
+      parameters: { type: "object", properties: {} },
+    });
+    runtime.loadCode(`bot ReviewAgent {
+  capabilities { github.listPullRequests }
+  instructions { Help the user. }
+}`);
+
+    const context = await runtime.execute("ReviewAgent", "Which PRs need my review?");
+
+    expect(context.output).toEqual(["Two pull requests are waiting for review."]);
+    expect(prompt).toContain("LIVE PERSONAL DATA REQUEST");
+    expect(prompt).toContain("github.listPullRequests");
+  });
+
+  it("keeps acknowledgements and capability questions tool-free", async () => {
+    let prompt = "";
+    const runtime = new HiveLangV5Runtime(async (systemPrompt) => {
+      prompt = systemPrompt;
+      return { content: "I can chat and use the tools you connect when you ask me to." };
+    });
+    runtime.registerTool("gmail.list", async () => ({ success: true }), {
+      name: "gmail.list",
+      description: "List recent inbox messages",
+      parameters: { type: "object", properties: {} },
+    });
+    runtime.loadCode(`bot ConversationalAgent {
+  capabilities { gmail.list }
+  instructions { Be helpful. }
+}`);
+
+    const context = await runtime.execute("ConversationalAgent", "hm?");
+
+    expect(context.toolCalls).toHaveLength(0);
+    expect(prompt).toContain("CONVERSATIONAL TURN");
+  });
 });

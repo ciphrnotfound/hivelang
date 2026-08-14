@@ -22,6 +22,9 @@ export interface Token {
     value: string;
     line: number;
     column: number;
+    /** Zero-based source range. Retained through parsing for accurate diagnostics. */
+    start: number;
+    end: number;
 }
 
 const KEYWORDS = new Set([
@@ -46,7 +49,7 @@ const KEYWORDS = new Set([
     'react', 'treeOfThoughts', 'tot', 'maxSteps', 'depth', 'branch', 'branchFactor',
     'remember', 'recall', 'parallel', 'timeout',
     // 10 new keywords
-    'match', 'case', 'while', 'break', 'validate', 'log', 'metric', 'assert', 'mask', 'transform'
+    'match', 'case', 'default', 'while', 'break', 'validate', 'log', 'metric', 'assert', 'mask', 'transform'
     , 'grounding', 'required', 'optional', 'off', 'cite_sources', 'on_missing',
     'memory', 'mode', 'ttl', 'remember_only', 'never_remember', 'none', 'session', 'durable'
 ]);
@@ -57,6 +60,7 @@ export class Tokenizer {
     private current = 0;
     private line = 1;
     private column = 1;
+    private errors: string[] = [];
 
     constructor(source: string) {
         this.source = source;
@@ -66,8 +70,12 @@ export class Tokenizer {
         while (!this.isAtEnd()) {
             this.scanToken();
         }
-        this.tokens.push({ type: 'EOF', value: '', line: this.line, column: this.column });
+        this.tokens.push({ type: 'EOF', value: '', line: this.line, column: this.column, start: this.current, end: this.current });
         return this.tokens;
+    }
+
+    getErrors(): string[] {
+        return [...this.errors];
     }
 
     private scanToken() {
@@ -135,13 +143,18 @@ export class Tokenizer {
             return;
         }
 
-        // Unknown character - skip
-        this.advance();
+        // Unknown characters must never disappear silently: they often indicate a
+        // malformed generated program or a copy/paste encoding issue.
+        const startLine = this.line;
+        const startCol = this.column;
+        const unknown = this.advance();
+        this.errors.push(`Unexpected character "${unknown}" at ${startLine}:${startCol}`);
     }
 
     private scanString(quote: string) {
         const startLine = this.line;
         const startCol = this.column;
+        const start = this.current;
         this.advance(); // consume opening quote
 
         let value = '';
@@ -160,14 +173,17 @@ export class Tokenizer {
 
         if (!this.isAtEnd()) {
             this.advance(); // consume closing quote
+        } else {
+            this.errors.push(`Unterminated string at ${startLine}:${startCol}`);
         }
 
-        this.tokens.push({ type: 'STRING', value, line: startLine, column: startCol });
+        this.tokens.push({ type: 'STRING', value, line: startLine, column: startCol, start, end: this.current });
     }
 
     private scanFString(quote: string) {
         const startLine = this.line;
         const startCol = this.column;
+        const start = this.current - 1;
         this.advance(); // consume opening quote
 
         let value = '';
@@ -186,13 +202,16 @@ export class Tokenizer {
 
         if (!this.isAtEnd()) {
             this.advance(); // consume closing quote
+        } else {
+            this.errors.push(`Unterminated f-string at ${startLine}:${startCol}`);
         }
 
-        this.tokens.push({ type: 'FSTRING', value, line: startLine, column: startCol });
+        this.tokens.push({ type: 'FSTRING', value, line: startLine, column: startCol, start, end: this.current });
     }
 
     private scanNumber() {
         const startCol = this.column;
+        const start = this.current;
         let value = '';
 
         while (this.isDigit(this.peek())) {
@@ -206,23 +225,28 @@ export class Tokenizer {
             }
         }
 
-        this.tokens.push({ type: 'NUMBER', value, line: this.line, column: startCol });
+        this.tokens.push({ type: 'NUMBER', value, line: this.line, column: startCol, start, end: this.current });
     }
 
     private scanIdentifier() {
         const startCol = this.column;
+        const start = this.current;
         let value = '';
 
-        while (this.isAlphaNumeric(this.peek())) {
+        // Integration slugs commonly contain a hyphen (`google-tasks`,
+        // `microsoft-todo`). Keep it inside an identifier when it connects two
+        // identifier characters; a standalone `-` remains bullet/operator syntax.
+        while (this.isAlphaNumeric(this.peek()) || (this.peek() === '-' && this.isAlphaNumeric(this.peekNext()))) {
             value += this.advance();
         }
 
         const type: TokenType = KEYWORDS.has(value) ? 'KEYWORD' : 'IDENTIFIER';
-        this.tokens.push({ type, value, line: this.line, column: startCol });
+        this.tokens.push({ type, value, line: this.line, column: startCol, start, end: this.current });
     }
 
     private scanOperator() {
         const startCol = this.column;
+        const start = this.current;
         let value = this.advance();
 
         // Two-character operators
@@ -237,7 +261,7 @@ export class Tokenizer {
             value += this.advance();
         }
 
-        this.tokens.push({ type: 'OPERATOR', value, line: this.line, column: startCol });
+        this.tokens.push({ type: 'OPERATOR', value, line: this.line, column: startCol, start, end: this.current });
     }
 
     private skipWhitespace() {
@@ -276,7 +300,7 @@ export class Tokenizer {
     }
 
     private addToken(type: TokenType, value: string) {
-        this.tokens.push({ type, value, line: this.line, column: this.column - value.length });
+        this.tokens.push({ type, value, line: this.line, column: this.column - value.length, start: this.current - value.length, end: this.current });
     }
 
     private isDigit(char: string): boolean {
